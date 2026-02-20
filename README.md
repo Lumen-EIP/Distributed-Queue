@@ -1,76 +1,129 @@
 # Distributed Queue
 
-A lightweight, file-based distributed queue system implemented in Python. This project demonstrates a producer-consumer implementation using a local JSON file as the persistent queue storage, managed by a broker process with file locking for concurrency safety.
+A lightweight, file-based distributed queue system implemented in Python. This project demonstrates various distributed queue implementations, starting with a simple JSON-based persistence model.
 
 ## 🚧 Status: Work in Progress
 
-The project is currently in the scaffolding phase. The core broker logic and data models are defined, but the implementation of full read/write operations and consumer logic is pending.
+- **Single JSON Queue**: Publisher implementation complete (Write with ACK). Consumer logic pending.
+- **Other Implementations**: Planned.
 
-## Features
+## Implementations
 
-- **File-Based Persistence**: Uses `Queue.json` for persistent storage of tasks.
-- **Concurrency Control**: Implements `filelock` and `aiofiles` for safe asynchronous file access.
-- **Broker Pattern**:
-  - `BrokerManager`: Manages the lifecycle of the queue broker process.
-  - `PublisherBroker`: Handles low-level file I/O and task processing.
-- **Event-Driven Architecture**: Uses an internal `multiprocessing.Queue` to pass events between the Application and the Broker.
+### 1. Single JSON Distributed Queue (`src/singleJsonDistributedQueue`)
 
-## Architecture
+This implementation uses a local JSON file as the persistent queue storage, managed by a dedicated broker process.
+
+#### Key Features
+
+- **File-Based Persistence**: Uses `Queue.json` as the single source of truth.
+- **Process Isolation**: The Broker runs in a separate `multiprocessing.Process` to decouple file I/O from the main application.
+- **Event-Driven Architecture**: Communication between Publisher/Consumer and the Broker is handled via strict `Event` objects passed through `multiprocessing.Queue`.
+- **Batch Processing**: The Broker batches write operations (flushing every 2 seconds or on shutdown) to optimize file I/O.
+- **Reliable Acknowledgements**: Publishers receive explicit acknowledgements via `multiprocessing.Pipe` after data is successfully persisted to disk.
+- **Concurrency Control**: Uses `filelock` to ensure safe access to the JSON file across processes.
+
+#### Architecture
 
 The system consists of three main components:
-1. **Publisher/Consumer**: (Stubs) Interfaces for client applications to push and pop tasks.
-2. **Broker Manager**: Ensures the Broker process is running and healthy.
-3. **Queue.json**: The single source of truth for the distributed queue state.
+
+1.  **Publisher (`Publisher.py`)**:
+    -   Generates a `TaskIn` object containing data.
+    -   Sends a `WRITE` event to the Broker Manager.
+    -   Waits for a synchronous acknowledgement via a dedicated pipe connection.
+
+2.  **Broker Manager (`BrokerManager.py`)**:
+    -   Orchestrates the lifecycle of the `PublisherBroker`.
+    -   Maintains a registry of connected Publishers (`publisherMap`) and their pipe connections.
+    -   Listens for completion events from the Broker and routes acknowledgements back to the correct Publisher.
+
+3.  **Publisher Broker (`PublisherBroker.py`)**:
+    -   The heavy lifter running in a background process.
+    -   Consumes events from the central `brokerQueue`.
+    -   Buffers tasks internally and performs batch writes to `queue/Queue.json`.
+    -   Uses `aiofiles` and `orjson` for high-performance non-blocking I/O.
+
+#### Data Models
+
+-   **`Event`**: The envelope for all communication. Contains `EventType` (READ/WRITE/SHUTDOWN), `EventOwner`, and the payload.
+-   **`TaskIn`**: The data transfer object sent by Publishers. Includes a unique `taskId` and `publisherId`.
 
 ## Dependencies
 
-- Python >= 3.12
-- `aiofiles`: Asynchronous file I/O.
-- `filelock`: Platform-independent file locking.
-- `orjson`: Fast JSON serialization/deserialization.
+-   Python >= 3.12
+-   `aiofiles`: Asynchronous file I/O.
+-   `filelock`: Platform-independent file locking.
+-   `orjson`: Fast JSON serialization/deserialization.
 
 ## Setup
 
-1. **Install Dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   # OR with pyproject.toml
-   pip install .
-   ```
+1.  **Install Dependencies**:
 
-2. **Run the Application**:
-   Currently, `main.py` initializes the Broker Manager.
-   ```bash
-   python src/singleJsonDistributedQueue/main.py
-   ```
+    ```bash
+    pip install -r requirements.txt
+    # OR with pyproject.toml
+    pip install .
+    ```
 
-## Usage
+2.  **Run the Application**:
 
-*Current functionality is limited to initialization.*
+    ```bash
+    python src/singleJsonDistributedQueue/main.py
+    ```
+
+## Usage Example
+
+### Initializing the System
 
 ```python
+import asyncio
 from pathlib import Path
 from filelock import AsyncFileLock
 from singleJsonDistributedQueue.broker.BrokerManager import BrokerManager
+from singleJsonDistributedQueue.Publisher import Publisher
+from singleJsonDistributedQueue.model.Task import TaskIn
 
-async def run_broker():
-    # Initialize the lock file
-    queue_lock = AsyncFileLock(Path("queue.lock"))
+async def main():
+    # 1. Initialize the Lock
+    queue_lock = AsyncFileLock(Path("src/singleJsonDistributedQueue/queue/Queue.json.lock"))
     
-    # Start the manager
+    # 2. Start the Broker Manager
     manager = BrokerManager(jsonQueueLock=queue_lock)
-    manager.run()
+    await manager.run()
+    
+    # 3. Create a Publisher
+    publisher = Publisher(brokerManager=manager)
+    
+    # 4. Send a Write Request
+    new_task = TaskIn(data="Process this data", isStart=True)
+    try:
+        await publisher.writeRequest(new_task)
+        print(f"Task {new_task.taskId} written successfully!")
+    except TimeoutError:
+        print("Failed to get acknowledgement.")
+        
+    # Cleanup
+    await manager.close()
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 ## Project Structure
 
-```
+```text
 src/singleJsonDistributedQueue/
-├── broker/          # BrokerManager and PublisherBroker logic
-├── enum/            # Event types and ownership definitions
-├── model/           # Data classes for Events and Tasks
-├── queue/           # Storage location for Queue.json
-├── Publisher.py     # Publisher interface
-├── Consumer.py      # Consumer interface
-└── main.py          # Entry point
+├── broker/          
+│   ├── BrokerManager.py     # Process orchestration & ACK routing
+│   └── PublisherBroker.py   # File I/O & Batch processing logic
+├── enum/            
+│   ├── EventOwner.py        # Enums for system components
+│   └── EventType.py         # WRITE, READ, SHUTDOWN
+├── model/           
+│   ├── Event.py             # Communication envelope
+│   └── Task.py              # TaskIn (DTO) and Task (Storage) models
+├── queue/           
+│   └── Queue.json           # Data storage
+├── Publisher.py     # Client interface for writing tasks
+├── Consumer.py      # Client interface for reading tasks
+└── main.py          
 ```
