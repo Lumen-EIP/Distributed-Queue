@@ -4,4 +4,24 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "aiofiles>=25.1.0",
+    "filelock>=3.24.0",
+    "orjson>=3.11.7",
+]
+
+[tool.uv.sources]
+distributed-queue = { workspace = true, editable = true }
+
+[tool.uv.workspace]
+members = [
+    ".",
+]
+
+[dependency-groups]
+dev = [
+    "distributed-queue",
+]
+
+
+
