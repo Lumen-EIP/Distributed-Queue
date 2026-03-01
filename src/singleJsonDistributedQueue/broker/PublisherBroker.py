@@ -12,6 +12,7 @@ import aiofiles
 import orjson
 from filelock import BaseAsyncFileLock
 
+from singleJsonDistributedQueue.enum.EventOwner import EventOwner
 from singleJsonDistributedQueue.enum.EventType import EventType
 from singleJsonDistributedQueue.model.Event import Event
 from singleJsonDistributedQueue.model.Task import TaskIn
@@ -66,9 +67,9 @@ class PublisherBroker:
                     await self.write(self.writeQueue)
                     await self.read(self.readQueue)
                     break
-                elif currEvent.eventType == EventType.WRITE and currEvent.task is not None:
+                elif currEvent.eventType == EventType.WRITE and isinstance(currEvent.task, TaskIn):
                     await self.writeQueue.put(item=currEvent.task)
-                elif currEvent.eventType == EventType.READ and currEvent.task is not None:
+                elif currEvent.eventType == EventType.READ and isinstance(currEvent.task, TaskIn):
                     await self.readQueue.put(item=currEvent.task)
 
                 if time.monotonic() - self.lastWriteQueueFlush >= 2:
@@ -128,4 +129,4 @@ class PublisherBroker:
         pass
 
     def acknowledgeWrite(self, publisherId: UUID):
-        self.acknowledgementQueue.put_nowait(publisherId)
+        self.acknowledgementQueue.put_nowait((publisherId, EventOwner.PUBLISHER))

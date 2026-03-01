@@ -5,6 +5,7 @@ from uuid import UUID, uuid1
 @dataclass
 class Task:
     taskId: UUID
+    consumerId: UUID | None
     data: str | None
     isStart: bool
     isComplete: bool
@@ -16,6 +17,7 @@ class Task:
 class TaskIn:
     taskId: UUID = field(default_factory=lambda: uuid1())
     publisherId: UUID = field(default_factory=uuid1)
+    consumerId: UUID | None = field(default=None)
     data: str | None = field(default=None)
     isStart: bool = field(default=False)
     isComplete: bool = field(default=False)
@@ -25,6 +27,7 @@ class TaskIn:
     def toTask(self):
         return Task(
             taskId=self.taskId,
+            consumerId=self.consumerId,
             data=self.data,
             isStart=self.isStart,
             isComplete=self.isComplete,
