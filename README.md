@@ -67,37 +67,22 @@ The system consists of three main components:
 -   `aiofiles`: Asynchronous file I/O.
 -   `filelock`: Platform-independent file locking.
 -   `orjson`: Fast JSON serialization/deserialization.
--   `uv`: (Optional) For fast project management and running.
+-   `uv`: (Mandatory) For project management and running.
 
 ## Setup
 
-1.  **Install Dependencies**:
+This project relies on `uv` for dependency management and execution.
 
-    ```bash
-    pip install -r requirements.txt
-    # OR with pyproject.toml
-    pip install .
-    ```
-
-    *Alternatively, if using `uv`:*
+1.  **Sync Dependencies**:
     ```bash
     uv sync
     ```
 
-2.  **Run the Single JSON Queue Application**:
-
-    The `main.py` entry point initializes the Broker Manager, spins up a pool of Publishers (10) and Consumers (5), and simulates a workload.
-
-    ```bash
-    python -m singleJsonDistributedQueue.main
-    ```
-    
-    *Or with `uv`:*
+2.  **Run the Application**:
+    Run the module directly using `uv run`. This command handles the environment activation automatically.
     ```bash
     uv run python -m singleJsonDistributedQueue.main
     ```
-
-    **Note**: Run this from the `src` directory or ensure `src` is in your `PYTHONPATH`.
 
 ## Project Structure
 
