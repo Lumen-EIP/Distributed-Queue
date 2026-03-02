@@ -12,11 +12,11 @@ from singleJsonDistributedQueue.model.Task import Task
 
 class Consumer:
     def __init__(self, brokerManager: BrokerManager):
-        self.logger = logging.getLogger(name=__name__)
+        self.consumerId: UUID = uuid1()
+        self.logger = logging.getLogger(f"Consumer-{str(self.consumerId)[:8]}")
         self.logger.setLevel(logging.DEBUG)
 
-        self.consumerId: UUID = uuid1()
-        self.logger.info(msg=f"Consumer: {self.consumerId} initializing....")
+        self.logger.debug(f"Initializing Consumer {self.consumerId}...")
 
         self.brokerManager = brokerManager
 
@@ -26,42 +26,44 @@ class Consumer:
 
         self.runningConsumer = asyncio.create_task(self.waitForTask())
 
-        self.logger.info(msg=f"Consumer: {self.consumerId} successfully Initialized")
+        self.logger.info("Consumer initialized successfully and listening.")
 
     async def writeRequest(self, taskDetail: Task):
-        self.logger.info(msg=f"Sending A Write Request for task: {taskDetail.taskId}")
+        self.logger.info(f"Ref-Id: {taskDetail.taskId} | Requesting WRITE operation.")
 
         newEvent = Event(eventType=EventType.WRITE, eventOwner=EventOwner.CONSUMER, task=taskDetail)
         await asyncio.to_thread(self.brokerManager.consumerBrokerQueue.put, newEvent)
 
-        self.logger.info(msg=f"Waiting for Write Acknowledgement of task: {taskDetail.taskId}")
+        self.logger.debug(f"Ref-Id: {taskDetail.taskId} | Awaiting WRITE ACK.")
 
         await self.waitForAcknowledgement()
 
-        self.logger.info(msg=f"Task: {taskDetail.taskId} Successfully Written")
+        self.logger.info(f"Ref-Id: {taskDetail.taskId} | WRITE operation confirmed.")
 
     async def readRequest(self, taskDetail: Task):
-        self.logger.info(msg=f"Sending A Read Request for task: {taskDetail.taskId}")
+        self.logger.info(f"Ref-Id: {taskDetail.taskId} | Requesting READ operation.")
 
         newEvent = Event(eventType=EventType.READ, eventOwner=EventOwner.CONSUMER, task=taskDetail)
         await asyncio.to_thread(self.brokerManager.consumerBrokerQueue.put, newEvent)
 
     async def waitForTask(self):
-        self.logger.info(msg=f"Consumer: {self.consumerId} waiting for task")
+        self.logger.debug("Entering task wait loop...")
 
         while True:
             try:
                 has_data = await asyncio.to_thread(self.consumerTaskConn.poll, 0.5)
                 if has_data:
                     taskDetail = await asyncio.to_thread(self.consumerTaskConn.recv)
-                    self.logger.info(msg=f"Consumer: {self.consumerId} got a task: {taskDetail.taskId}")
+                    self.logger.info(f"Ref-Id: {taskDetail.taskId} | Task received.")
 
                     await self.processTask(taskDetail=taskDetail)
             except CancelledError:
                 return
 
     async def processTask(self, taskDetail: Task):
-        self.logger.info(msg=f"Task: {taskDetail.taskId} Started By Consumer: {self.consumerId}")
+        self.logger.info(
+            f"Ref-Id: {taskDetail.taskId} | Processing started (Duration: {taskDetail.reqTime}s)."
+        )
 
         reqTime = taskDetail.reqTime
         while reqTime > 0:
@@ -70,10 +72,10 @@ class Consumer:
         taskDetail.isComplete = True
         await self.writeRequest(taskDetail=taskDetail)
 
-        self.logger.info(msg=f"Task: {taskDetail.taskId} Finished By Consumer: {self.consumerId}")
+        self.logger.info(f"Ref-Id: {taskDetail.taskId} | Processing finished.")
 
         await asyncio.to_thread(self.brokerManager.consumerWaitingQueue.put, self.consumerId)
-        self.logger.info(msg=f"Consumer: {self.consumerId} Going Back to Waiting Queue")
+        self.logger.debug("Re-joined waiting queue.")
         return True
 
     def aliveAcknowledgement(self):
@@ -94,7 +96,7 @@ class Consumer:
                 return
 
     async def close(self):
-        self.logger.info(msg=f"Consumer: {self.consumerId} About to Shutdown....")
+        self.logger.info("Shutting down Consumer.")
         if self.runningConsumer is not None:
             self.runningConsumer.cancel()
             await self.runningConsumer

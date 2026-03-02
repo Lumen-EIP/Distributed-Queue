@@ -20,10 +20,10 @@ from singleJsonDistributedQueue.model.Task import Task
 
 class BrokerManager:
     def __init__(self, jsonQueueLock: BaseAsyncFileLock):
-        self.logger = logging.getLogger(name=__name__)
+        self.logger = logging.getLogger("BrokerManager")
         self.logger.setLevel(logging.DEBUG)
 
-        self.logger.info(msg="Broker Manager Initializing....")
+        self.logger.debug("Initializing Broker Manager...")
 
         self.publisherBrokerQueue: Queue[Event] = multiprocessing.Queue()
         self.consumerBrokerQueue: Queue[Event] = multiprocessing.Queue()
@@ -55,10 +55,10 @@ class BrokerManager:
 
         self.ackTask: asyncio.Task | None = None
 
-        self.logger.info(msg="Broker Manager Successfully Initialized")
+        self.logger.info("Broker Manager initialized.")
 
     async def run(self):
-        self.logger.info(msg="Broker Manager Starting....")
+        self.logger.info("Starting broker processes...")
 
         self.publisherBrokerProcess.start()
         self.consumerBrokerProcess.start()
@@ -66,7 +66,7 @@ class BrokerManager:
         self.assignTask = asyncio.create_task(self.listenTaskAssignment())
 
     async def close(self):
-        self.logger.info(msg="Broker Manager Closing....")
+        self.logger.info("Broker Manager shutting down...")
 
         await self.shutdownBroker()
 
@@ -78,10 +78,10 @@ class BrokerManager:
             self.assignTask.cancel()
             await self.assignTask
 
-        self.logger.info(msg="Broker Manager Successfully Closed")
+        self.logger.info("Broker Manager closed.")
 
     async def listenAcknowledgement(self):
-        self.logger.info(msg="Broker Manager Started to listen acknowledgements....")
+        self.logger.debug("Listening for acknowledgements...")
 
         while True:
             try:
@@ -94,14 +94,14 @@ class BrokerManager:
                 if conn is not None:
                     conn.send(True)
                 else:
-                    self.logger.warning(f"ACK received for unknown publisher/consumer {receiverId}")
+                    self.logger.warning(f"ACK received for unknown ID: {receiverId}")
             except Empty:
                 pass
             except CancelledError:
                 break
 
     async def listenTaskAssignment(self):
-        self.logger.info(msg="Broker Manager Started to listen task assignments....")
+        self.logger.debug("Listening for task assignments...")
 
         while True:
             try:
@@ -109,9 +109,9 @@ class BrokerManager:
                 conn = self.consumerTaskMap[consumerId]
                 if conn is not None:
                     conn.send(assignedTask)
-                    self.logger.info(f"Task Successfully Send to Consumer: {consumerId}")
+                    self.logger.info(f"Task dispatched to Consumer {str(consumerId)[:8]}.")
                 else:
-                    self.logger.warning(f"Task received for unknown consumer {consumerId}")
+                    self.logger.warning(f"Task assignment for unknown Consumer {str(consumerId)[:8]}.")
             except Empty:
                 pass
             except CancelledError:
@@ -129,14 +129,14 @@ class BrokerManager:
             raise Exception
 
     async def shutdownBroker(self):
-        self.logger.info(msg="Publisher Broker About To Shutdown")
+        self.logger.info("Stopping Publisher Broker...")
         if self.publisherBrokerProcess and self.publisherBrokerProcess.is_alive():
             await asyncio.to_thread(
                 self.publisherBrokerQueue.put,
                 Event(eventType=EventType.SHUTDOWN, eventOwner=EventOwner.BROKER_MANAGER),
             )
 
-        self.logger.info(msg="Consumer Broker About To Shutdown")
+        self.logger.info("Stopping Consumer Broker...")
         if self.consumerBrokerProcess and self.consumerBrokerProcess.is_alive():
             await asyncio.to_thread(
                 self.consumerBrokerQueue.put,
@@ -147,19 +147,19 @@ class BrokerManager:
             await asyncio.to_thread(self.publisherBrokerProcess.join, 5)
 
             if self.publisherBrokerProcess.is_alive():
-                self.logger.warning("Publisher Broker did not exit, terminating...")
+                self.logger.warning("Publisher Broker hung, forcing termination.")
                 self.publisherBrokerProcess.terminate()
                 await asyncio.to_thread(self.publisherBrokerProcess.join)
-        self.logger.info(msg="Publisher Broker Successfully Shutdown")
+        self.logger.info("Publisher Broker stopped.")
 
         if self.consumerBrokerProcess:
             await asyncio.to_thread(self.consumerBrokerProcess.join, 5)
 
             if self.consumerBrokerProcess.is_alive():
-                self.logger.warning("Consumer Broker did not exit, terminating...")
+                self.logger.warning("Consumer Broker hung, forcing termination.")
                 self.consumerBrokerProcess.terminate()
                 await asyncio.to_thread(self.consumerBrokerProcess.join)
-        self.logger.info(msg="Consumer Broker Successfully Shutdown")
+        self.logger.info("Consumer Broker stopped.")
 
     def registerPublisher(self, publisherId: UUID):
         publisherConn, brokerConn = multiprocessing.Pipe()
@@ -167,7 +167,7 @@ class BrokerManager:
         return publisherConn
 
     def registerConsumer(self, consumerId: UUID):
-        self.logger.info(msg=f"Registering Consumer: {consumerId}")
+        self.logger.info(f"Registering Consumer {str(consumerId)[:8]}...")
         consumerConn, brokerConn = multiprocessing.Pipe()
         self.consumerMap[consumerId] = brokerConn
 
@@ -175,6 +175,5 @@ class BrokerManager:
         self.consumerTaskMap[consumerId] = brokerTaskConn
 
         self.consumerWaitingQueue.put_nowait(consumerId)
-        self.logger.info(msg=f"Consumer: {consumerId} Successfully Registered")
-        self.logger.info(msg=f"Available Consumers {self.consumerTaskMap.keys()}")
+        self.logger.info(f"Consumer {str(consumerId)[:8]} registered.")
         return consumerConn, consumerTaskConn

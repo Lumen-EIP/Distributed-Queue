@@ -1,4 +1,3 @@
-from singleJsonDistributedQueue.Consumer import Consumer
 import asyncio
 import logging
 from pathlib import Path
@@ -7,35 +6,40 @@ from random import randint
 from filelock import AsyncFileLock
 
 from singleJsonDistributedQueue.broker.BrokerManager import BrokerManager
+from singleJsonDistributedQueue.Consumer import Consumer
 from singleJsonDistributedQueue.model.Task import TaskIn
 from singleJsonDistributedQueue.Publisher import Publisher
 
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s",
+    datefmt="%H:%M:%S",
+)
 
-logger = logging.getLogger(name=__name__)
+logger = logging.getLogger(name="Main")
 logger.setLevel(logging.DEBUG)
 
 
 async def subMain():
-    logger.info(msg="subMain function about to Start....")
+    logger.info("Application starting...")
 
-    logger.info(msg="Creating AsyncFileLock for Queue.json....")
+    logger.debug("Initializing file lock for Queue.json...")
     globalQueueLock = AsyncFileLock(Path(r"src\singleJsonDistributedQueue\queue\Queue.json.lock"))
-    logger.info(msg="AsyncFileLock for Queue.json Successfully Created")
+    logger.debug("File lock for Queue.json initialized.")
 
-    logger.info(msg="Creating globalBrokerManager....")
+    logger.info("Initializing Global Broker Manager...")
     globalBrokerManager = BrokerManager(jsonQueueLock=globalQueueLock)
-    logger.info(msg="globalBrokerManager Successfully Created")
-    logger.info(msg="globalBrokerManager About to run....")
+    logger.info("Global Broker Manager initialized.")
+    logger.info("Starting Global Broker Manager...")
     await globalBrokerManager.run()
 
-    logger.info(msg="Creating Publishers....")
+    logger.info("Creating 10 Publisher instances...")
     publisherPool = [Publisher(brokerManager=globalBrokerManager) for _ in range(10)]
-    logger.info(msg="Publishers Successfully Created")
+    logger.info("Publisher pool created.")
 
-    logger.info(msg="Creating Consumers....")
+    logger.info("Creating 5 Consumer instances...")
     consumerPool = [Consumer(brokerManager=globalBrokerManager) for _ in range(5)]
-    logger.info(msg="Consumers Successfully Created")
+    logger.info("Consumer pool created.")
 
     await asyncio.sleep(5)
 
@@ -65,7 +69,7 @@ async def subMain():
 
 
 def main():
-    logger.info(msg="Main function running....")
+    logger.info("Main function running...")
     asyncio.run(subMain())
 
 

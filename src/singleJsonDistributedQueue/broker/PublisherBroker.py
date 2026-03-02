@@ -37,10 +37,10 @@ class PublisherBroker:
         acknowledgementQueue: multiprocessing.Queue,
         jsonQueueLock: BaseAsyncFileLock,
     ):
-        self.logger = logging.getLogger(name=__name__)
+        self.logger = logging.getLogger("PublisherBroker")
         self.logger.setLevel(logging.DEBUG)
 
-        self.logger.info(msg="Publisher Broker Initializing....")
+        self.logger.debug("Initializing Publisher Broker...")
 
         self.brokerQueue = brokerQueue
         self.acknowledgementQueue = acknowledgementQueue
@@ -53,16 +53,16 @@ class PublisherBroker:
         self.jsonQueueLock = jsonQueueLock
         self.jsonQueuePath = Path(r"src\singleJsonDistributedQueue\queue\Queue.json")
 
-        self.logger.info(msg="Publisher Broker Successfully Initialized")
+        self.logger.info("Publisher Broker initialized.")
 
     async def run(self):
-        self.logger.info(msg="Publisher Broker Starting....")
+        self.logger.info("Publisher Broker started.")
         while True:
             try:
                 currEvent: Event = await asyncio.to_thread(self.brokerQueue.get, True, 1)
 
-                self.logger.info(
-                    msg=f"Received A {currEvent.eventType} Event. Last Write: {time.monotonic() - self.lastWriteQueueFlush}"
+                self.logger.debug(
+                    f"Event: {currEvent.eventType} | Time since last write: {time.monotonic() - self.lastWriteQueueFlush:.2f}s"
                 )
 
                 if currEvent.eventType == EventType.SHUTDOWN:
@@ -89,7 +89,7 @@ class PublisherBroker:
 
     async def write(self, taskDetails: Queue[TaskIn]):
 
-        self.logger.info(msg="Publisher Broker About to Write Some Task into Queue")
+        self.logger.debug("Writing tasks to queue file...")
 
         async with self.jsonQueueLock:
             try:
@@ -124,7 +124,7 @@ class PublisherBroker:
                     await asyncio.to_thread(self.acknowledgeWrite, publisherId)
 
             except Exception:
-                self.logger.exception("Something wrong occurred")
+                self.logger.exception("ERROR: Exception during queue write operation.")
                 raise
 
     async def read(self, taskDetails: Queue[TaskIn]):

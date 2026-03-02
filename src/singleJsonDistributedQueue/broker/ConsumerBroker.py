@@ -4,7 +4,6 @@ import multiprocessing
 import queue
 import time
 from asyncio import CancelledError, Queue, QueueEmpty
-from multiprocessing.connection import PipeConnection
 from pathlib import Path
 from typing import Dict, List
 from uuid import UUID
@@ -46,10 +45,10 @@ class ConsumerBroker:
         consumerTaskMapQueue: multiprocessing.Queue,
         jsonQueueLock: BaseAsyncFileLock,
     ):
-        self.logger = logging.getLogger(name=__name__)
+        self.logger = logging.getLogger("ConsumerBroker")
         self.logger.setLevel(logging.DEBUG)
 
-        self.logger.info(msg="Consumer Broker Initializing....")
+        self.logger.debug("Initializing Consumer Broker...")
 
         self.brokerQueue = brokerQueue
 
@@ -68,10 +67,10 @@ class ConsumerBroker:
         self.jsonQueueLock = jsonQueueLock
         self.jsonQueuePath = Path(r"src\singleJsonDistributedQueue\queue\Queue.json")
 
-        self.logger.info(msg="Consumer Broker Successfully Initialized")
+        self.logger.info("Consumer Broker initialized.")
 
     async def run(self):
-        self.logger.info(msg="Consumer Broker Starting....")
+        self.logger.info("Starting event loop...")
 
         asyncio.create_task(self.assignTask())
 
@@ -79,8 +78,8 @@ class ConsumerBroker:
             try:
                 currEvent: Event = await asyncio.to_thread(self.brokerQueue.get, True, 1)
 
-                self.logger.info(
-                    msg=f"Received A {currEvent.eventType} Event. Last Write: {time.monotonic() - self.lastWriteQueueFlush}"
+                self.logger.debug(
+                    f"Event: {currEvent.eventType} | Time since last write: {time.monotonic() - self.lastWriteQueueFlush:.2f}s"
                 )
 
                 if currEvent.eventType == EventType.SHUTDOWN:
@@ -106,7 +105,7 @@ class ConsumerBroker:
                 return
 
     async def assignTask(self):
-        self.logger.info(msg="Consumer Broker Start Assigning....")
+        self.logger.info("Task assignment loop started.")
         while True:
             await asyncio.sleep(2.0)
             try:
@@ -129,7 +128,9 @@ class ConsumerBroker:
                             consumerId = await asyncio.to_thread(self.consumerWaitQueue.get, True, 1)
                         except queue.Empty:
                             continue
-                        self.logger.info(msg=f"Task: {taskDetail.taskId} assigned to Consumer: {consumerId}")
+                        self.logger.info(
+                            f"Assigning Task {taskDetail.taskId} to Consumer {str(consumerId)[:8]}."
+                        )
                         taskDetail.consumerId = consumerId
                         await asyncio.to_thread(self.putTaskIntoQueue, consumerId, taskDetail)
 
@@ -137,7 +138,7 @@ class ConsumerBroker:
                 return
 
     async def write(self, taskDetails: Queue[Task]):
-        self.logger.info(msg="Consumer Broker About to Write Some Task into Queue")
+        self.logger.debug("Writing tasks to queue file...")
 
         async with self.jsonQueueLock:
             try:
@@ -174,7 +175,7 @@ class ConsumerBroker:
                     await asyncio.to_thread(self.acknowledgeWrite, consumerId)
 
             except Exception:
-                self.logger.exception("Something wrong occurred")
+                self.logger.exception("ERROR: Exception during queue write operation.")
                 raise
 
     async def read(self, taskDetails: Queue[Task]):

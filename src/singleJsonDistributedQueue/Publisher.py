@@ -13,28 +13,28 @@ from singleJsonDistributedQueue.model.Task import TaskIn
 
 class Publisher:
     def __init__(self, brokerManager: BrokerManager):
-        self.logger = logging.getLogger(name=__name__)
+        self.publisherId = uuid1()
+        self.logger = logging.getLogger(f"Publisher-{str(self.publisherId)[:8]}")
         self.logger.setLevel(logging.DEBUG)
 
-        self.publisherId = uuid1()
-        self.logger.info(msg=f"Publisher: {self.publisherId} initializing....")
+        self.logger.debug(f"Initializing Publisher {self.publisherId}...")
 
         self.brokerManager = brokerManager
         self.publisherConn = self.brokerManager.registerPublisher(self.publisherId)
 
-        self.logger.info(msg=f"Publisher: {self.publisherId} successfully Initialized")
+        self.logger.info("Publisher initialized successfully.")
 
     async def writeRequest(self, taskDetail: TaskIn):
-        self.logger.info(msg=f"Publisher: {self.publisherId} Sending A Write Request for task: {taskDetail.taskId}")
+        self.logger.info(f"Ref-Id: {taskDetail.taskId} | Requesting WRITE operation.")
 
         newEvent = Event(eventType=EventType.WRITE, eventOwner=EventOwner.PUBLISHER, task=taskDetail)
         await asyncio.to_thread(self.brokerManager.publisherBrokerQueue.put, newEvent)
 
-        self.logger.info(msg=f"Publisher: {self.publisherId} Waiting for Write Acknowledgement of task: {taskDetail.taskId}")
+        self.logger.debug(f"Ref-Id: {taskDetail.taskId} | Awaiting WRITE ACK.")
 
         await self.waitForAcknowledgement()
 
-        self.logger.info(msg=f"Task: {taskDetail.taskId} Successfully Written by Publisher: {self.publisherId}")
+        self.logger.info(f"Ref-Id: {taskDetail.taskId} | WRITE operation confirmed.")
 
     async def readRequest(self, taskDetail: TaskIn):
         newEvent = Event(eventType=EventType.READ, eventOwner=EventOwner.PUBLISHER, task=taskDetail)
