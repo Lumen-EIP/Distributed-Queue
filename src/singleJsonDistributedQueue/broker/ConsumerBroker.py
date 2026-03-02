@@ -9,7 +9,7 @@ from typing import Dict, List
 from uuid import UUID
 
 import aiofiles
-import orjson
+import msgspec
 from filelock import BaseAsyncFileLock
 
 from singleJsonDistributedQueue.enum.EventOwner import EventOwner
@@ -115,7 +115,7 @@ class ConsumerBroker:
                         if not content.strip():
                             data: Dict[str, Dict] = {}
                         else:
-                            data: Dict[str, Dict] = orjson.loads(content)
+                            data: Dict[str, Dict] = msgspec.json.decode(content)
                 except FileNotFoundError:
                     data: Dict[str, Dict] = {}
 
@@ -149,7 +149,7 @@ class ConsumerBroker:
                         data = {}
                         self.logger.debug("Queue file is empty.")
                     else:
-                        data = orjson.loads(content)
+                        data = msgspec.json.decode(content)
                         self.logger.debug(f"Loaded {len(data)} existing tasks from file.")
             except FileNotFoundError:
                 self.logger.warning("Queue file not found. Creating new task list.")
@@ -190,7 +190,7 @@ class ConsumerBroker:
 
                 if processed_count > 0:
                     async with aiofiles.open(file=self.jsonQueuePath, mode="w") as jsonQueueFile:
-                        jsonString = orjson.dumps(data, option=orjson.OPT_INDENT_2).decode()
+                        jsonString = msgspec.json.format(msgspec.json.encode(data), indent=2).decode()
                         await jsonQueueFile.write(jsonString)
                     self.logger.debug("Successfully wrote updated task list to file.")
                 else:

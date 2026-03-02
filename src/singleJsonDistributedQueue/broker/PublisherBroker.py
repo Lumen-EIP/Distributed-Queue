@@ -9,7 +9,7 @@ from typing import List
 from uuid import UUID
 
 import aiofiles
-import orjson
+import msgspec
 from filelock import BaseAsyncFileLock
 
 from singleJsonDistributedQueue.enum.EventOwner import EventOwner
@@ -98,7 +98,7 @@ class PublisherBroker:
                     if not content.strip():
                         data = {}
                     else:
-                        data = orjson.loads(content)
+                        data = msgspec.json.decode(content)
             except FileNotFoundError:
                 data = {}
 
@@ -116,7 +116,7 @@ class PublisherBroker:
                         data[str(taskDetail.taskId)] = taskDetail.toTask()
 
                 async with aiofiles.open(file=self.jsonQueuePath, mode="w") as jsonQueueFile:
-                    jsonString = orjson.dumps(data, option=orjson.OPT_INDENT_2).decode()
+                    jsonString = msgspec.json.format(msgspec.json.encode(data), indent=2).decode()
                     await jsonQueueFile.write(jsonString)
 
                 while publisherIds:
