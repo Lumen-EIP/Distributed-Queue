@@ -138,45 +138,76 @@ class ConsumerBroker:
                 return
 
     async def write(self, taskDetails: Queue[Task]):
-        self.logger.debug("Writing tasks to queue file...")
+        self.logger.debug(f"Entering write function with approx {taskDetails.qsize()} tasks waiting.")
 
         async with self.jsonQueueLock:
+            self.logger.debug("Acquired JSON Queue Lock.")
             try:
                 async with aiofiles.open(file=self.jsonQueuePath, mode="r") as jsonQueueFile:
                     content = await jsonQueueFile.read()
                     if not content.strip():
                         data = {}
+                        self.logger.debug("Queue file is empty.")
                     else:
                         data = orjson.loads(content)
+                        self.logger.debug(f"Loaded {len(data)} existing tasks from file.")
             except FileNotFoundError:
+                self.logger.warning("Queue file not found. Creating new task list.")
                 data = {}
 
             try:
                 consumerIds: List[UUID] = []
+                processed_count = 0
                 while True:
                     try:
                         taskDetail = taskDetails.get_nowait()
+                        processed_count += 1
                     except QueueEmpty:
                         break
+
                     if taskDetail.consumerId is not None:
                         consumerIds.append(taskDetail.consumerId)
+
                         if taskDetail.isComplete:
-                            if taskDetail.taskId in data:
+                            if str(taskDetail.taskId) in data:
                                 del data[str(taskDetail.taskId)]
+                                self.logger.info(
+                                    f"Ref-Id: {taskDetail.taskId} | Task COMPLETED. Removed from queue."
+                                )
+                            else:
+                                self.logger.warning(
+                                    f"Ref-Id: {taskDetail.taskId} | Task marked complete but not found in queue data."
+                                )
                         else:
                             data[str(taskDetail.taskId)] = taskDetail
+                            self.logger.info(f"Ref-Id: {taskDetail.taskId} | Task UPDATED/ADDED in queue.")
+                    else:
+                        self.logger.warning(
+                            f"Ref-Id: {taskDetail.taskId} | Task has no consumerId. Skipping."
+                        )
 
-                async with aiofiles.open(file=self.jsonQueuePath, mode="w") as jsonQueueFile:
-                    jsonString = orjson.dumps(data, option=orjson.OPT_INDENT_2).decode()
-                    await jsonQueueFile.write(jsonString)
+                self.logger.debug(f"Processed {processed_count} tasks from internal queue.")
 
+                if processed_count > 0:
+                    async with aiofiles.open(file=self.jsonQueuePath, mode="w") as jsonQueueFile:
+                        jsonString = orjson.dumps(data, option=orjson.OPT_INDENT_2).decode()
+                        await jsonQueueFile.write(jsonString)
+                    self.logger.debug("Successfully wrote updated task list to file.")
+                else:
+                    self.logger.debug("No tasks to write. File untouched.")
+
+                ack_count = 0
                 while consumerIds:
                     consumerId = consumerIds.pop()
                     await asyncio.to_thread(self.acknowledgeWrite, consumerId)
+                    ack_count += 1
+                self.logger.debug(f"Sent acknowledgements to {ack_count} consumers.")
 
             except Exception:
                 self.logger.exception("ERROR: Exception during queue write operation.")
                 raise
+            finally:
+                self.logger.debug("Released JSON Queue Lock.")
 
     async def read(self, taskDetails: Queue[Task]):
         pass
