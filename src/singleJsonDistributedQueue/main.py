@@ -1,3 +1,4 @@
+from singleJsonDistributedQueue.Consumer import Consumer
 import asyncio
 import logging
 from pathlib import Path
@@ -32,6 +33,12 @@ async def subMain():
     publisherPool = [Publisher(brokerManager=globalBrokerManager) for _ in range(10)]
     logger.info(msg="Publishers Successfully Created")
 
+    logger.info(msg="Creating Consumers....")
+    consumerPool = [Consumer(brokerManager=globalBrokerManager) for _ in range(5)]
+    logger.info(msg="Consumers Successfully Created")
+
+    await asyncio.sleep(5)
+
     publisherTasks = []
     try:
         for publisher in publisherPool:
@@ -47,11 +54,14 @@ async def subMain():
 
             await asyncio.sleep(0.5)
         await asyncio.gather(*publisherTasks, return_exceptions=True)
+        await asyncio.sleep(10)
     except Exception:
         for task in publisherTasks:
             task.cancel()
     finally:
         await globalBrokerManager.close()
+        for consumer in consumerPool:
+            await consumer.close()
 
 
 def main():

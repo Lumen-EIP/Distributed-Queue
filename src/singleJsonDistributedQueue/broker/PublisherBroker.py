@@ -37,6 +37,11 @@ class PublisherBroker:
         acknowledgementQueue: multiprocessing.Queue,
         jsonQueueLock: BaseAsyncFileLock,
     ):
+        self.logger = logging.getLogger(name=__name__)
+        self.logger.setLevel(logging.DEBUG)
+
+        self.logger.info(msg="Publisher Broker Initializing....")
+
         self.brokerQueue = brokerQueue
         self.acknowledgementQueue = acknowledgementQueue
         self.writeQueue: Queue[TaskIn] = Queue()
@@ -47,9 +52,6 @@ class PublisherBroker:
 
         self.jsonQueueLock = jsonQueueLock
         self.jsonQueuePath = Path(r"src\singleJsonDistributedQueue\queue\Queue.json")
-
-        self.logger = logging.getLogger(name=__name__)
-        self.logger.setLevel(logging.DEBUG)
 
         self.logger.info(msg="Publisher Broker Successfully Initialized")
 
