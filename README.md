@@ -111,3 +111,7 @@ src/singleJsonDistributedQueue/
 ├── Consumer.py      # Client interface for processing tasks
 └── main.py          # Demonstration entry point
 ```
+
+## Resources
+
+- [Turbopuffer Blog: Object Storage Queue](https://turbopuffer.com/blog/object-storage-queue) - Key resource and inspiration for implementing this distributed queue system. Recommended reading for understanding the underlying concepts.
