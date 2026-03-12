@@ -20,8 +20,8 @@ This implementation uses a local JSON file as the persistent queue storage, mana
 
 - **File-Based Persistence**: Uses `Queue.json` as the single source of truth.
 - **Dual-Broker Architecture**:
-    - **PublisherBroker**: Dedicated process for handling high-throughput write operations.
-    - **ConsumerBroker**: Dedicated process for task scheduling and assignment to idle consumers.
+    - **PublisherBroker**: Dedicated process for handling high-throughput write operations. Batch writes every 2 seconds.
+    - **ConsumerBroker**: Dedicated process for task lifecycle management. Actively scans `Queue.json` for unassigned tasks and assigns them to idle consumers. Removes completed tasks from storage.
 - **Process Isolation**: Brokers run in separate `multiprocessing.Process` instances to decouple file I/O and logic from the main application.
 - **Event-Driven Architecture**: Communication uses strict `Event` objects passed through `multiprocessing.Queue`.
 - **Consumer Lifecycle Management**:
@@ -30,8 +30,11 @@ This implementation uses a local JSON file as the persistent queue storage, mana
     - Tasks are pushed to consumers via dedicated `Pipe` connections (Push model).
 - **Reliable Acknowledgements**: Both Publishers and Consumers receive explicit acknowledgements for their operations.
 - **Concurrency Control**: Uses `filelock` to ensure safe access to the JSON file across multiple processes.
+- **High Performance Serialization**: Utilizes `msgspec` for ultra-fast JSON encoding/decoding, replacing standard libraries.
 
 #### Architecture
+
+![Single JSON Distributed Queue Architecture](readme_files/singleJsonDistributedQueueFiles/Single_Json_Distributed_Queue_Architecture.png)
 
 The system consists of three main components:
 
@@ -48,12 +51,16 @@ The system consists of three main components:
 
 3.  **Broker Manager (`BrokerManager.py`)**:
     -   **Orchestrator**: Manages the lifecycle of `PublisherBroker` and `ConsumerBroker` processes.
-    -   **Registry**: Maintains maps of all active Publishers and Consumers.
+    -   **Registry**: Maintains maps of all active Publishers (`publisherMap`), Consumers (`consumerMap`), and Task Assignment connections (`consumerTaskMap`).
     -   **Router**: Listens for completion events and routes acknowledgements/tasks to the correct specific process via Pipes.
+    -   **Queue Hub**: Acts as the central hub for multiple `multiprocessing.Queue` instances (`publisherBrokerQueue`, `consumerBrokerQueue`, `acknowledgementQueue`, `consumerWaitingQueue`, `consumerTaskMapQueue`).
 
 4.  **Broker Processes**:
-    -   **PublisherBroker**: Batches write operations to `Queue.json` (flushing every 2s).
-    -   **ConsumerBroker**: Monitors the queue for pending tasks and assigns them to available consumers from the `WaitingQueue`.
+    -   **PublisherBroker**: Handles `TaskIn` write requests. Batches operations to `Queue.json` (flushing every 2s).
+    -   **ConsumerBroker**: Handles `Task` updates. 
+        -   **Scanning**: Actively scans `Queue.json` every 2s for unassigned tasks.
+        -   **Assignment**: Retrieves idle consumers from `consumerWaitingQueue` and dispatches tasks.
+        -   **Completion**: Removes completed tasks from `Queue.json`.
 
 #### Data Models
 
@@ -63,10 +70,10 @@ The system consists of three main components:
 
 ## Dependencies
 
--   Python >= 3.12
+-   Python >= 3.14
 -   `aiofiles`: Asynchronous file I/O.
 -   `filelock`: Platform-independent file locking.
--   `orjson`: Fast JSON serialization/deserialization.
+-   `msgspec`: Fast JSON serialization/deserialization and validation.
 -   `uv`: (Mandatory) For project management and running.
 
 ## Setup
